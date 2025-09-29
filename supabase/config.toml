@@ -1,1 +1,7 @@
 project_id = "tvmjjmwznomctlynhwnq"
+
+[functions.get-tournaments]
+verify_jwt = false
+
+[functions.get-player-stats]
+verify_jwt = false
