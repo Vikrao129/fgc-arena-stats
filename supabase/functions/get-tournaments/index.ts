@@ -90,14 +90,18 @@ serve(async (req) => {
     }
 
     // Now get tournaments with the correct game IDs
+    // Get current time in seconds (Unix timestamp)
+    const now = Math.floor(Date.now() / 1000);
+    
     const tournamentQuery = `
-      query GetTournaments($perPage: Int!, $page: Int!, $gameIds: [ID]) {
+      query GetTournaments($perPage: Int!, $page: Int!, $gameIds: [ID], $afterDate: Timestamp) {
         tournaments(query: {
           perPage: $perPage
           page: $page
           sortBy: "startAt desc"
           filter: {
             videogameIds: $gameIds
+            afterDate: $afterDate
           }
         }) {
           nodes {
@@ -112,10 +116,14 @@ serve(async (req) => {
       }
     `;
 
+    // Get tournaments from the last 6 months
+    const sixMonthsAgo = now - (180 * 24 * 60 * 60);
+    
     const tournamentVariables = {
       perPage: 10,
       page: 1,
-      gameIds: gameIds
+      gameIds: gameIds,
+      afterDate: sixMonthsAgo
     };
 
     console.log('Fetching tournaments with variables:', JSON.stringify(tournamentVariables, null, 2));
