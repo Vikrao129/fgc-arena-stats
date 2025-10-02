@@ -52,6 +52,7 @@ const GameSection = () => {
   }, []);
 
   // Group tournaments by game
+  const SF6_ID = 43868;
   const gameMap = new Map<string, Tournament[]>();
   tournaments.forEach(tournament => {
     tournament.events.forEach(event => {
