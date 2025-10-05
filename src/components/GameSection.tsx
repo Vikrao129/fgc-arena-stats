@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Users, Trophy, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 interface Tournament {
   id: string;
@@ -25,6 +26,7 @@ interface Tournament {
 }
 
 const GameSection = () => {
+  const navigate = useNavigate();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -157,7 +159,15 @@ const GameSection = () => {
                     ))
                   )}
                 </div>
-                <Button variant="outline" className="w-full mt-4 border-primary/30 text-primary hover:bg-primary/10">
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-4 border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={() => {
+                    if (game.name === "Street Fighter 6") {
+                      navigate('/sf6-tournaments');
+                    }
+                  }}
+                >
                   View All {game.name} Tournaments
                 </Button>
               </CardContent>

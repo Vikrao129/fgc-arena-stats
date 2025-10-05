@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Trophy, Users, Gamepad2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Navigation = () => {
+  const navigate = useNavigate();
+  
   return (
     <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
@@ -14,7 +17,11 @@ const Navigation = () => {
           </div>
           
           <div className="flex items-center space-x-6">
-            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+            <Button 
+              variant="ghost" 
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => navigate('/sf6-tournaments')}
+            >
               <Trophy className="h-4 w-4 mr-2" />
               Tournaments
             </Button>
