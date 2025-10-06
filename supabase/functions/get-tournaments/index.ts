@@ -108,6 +108,22 @@ serve(async (req) => {
             startAt
             endAt
             numAttendees
+            events {
+              id
+              name
+              videogame {
+                id
+                name
+              }
+              standings(query: { perPage: 8 }) {
+                nodes {
+                  placement
+                  entrant {
+                    name
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -148,8 +164,30 @@ serve(async (req) => {
       throw new Error('GraphQL query failed');
     }
 
-    // Transform the data to match our existing format  
+    // Transform the data to match our existing format
+    const SF6_ID = parseInt(gameIds[0]);
+    const TEKKEN8_ID = parseInt(gameIds[1]);
+    
     const transformedData = (data.data?.tournaments?.nodes || []).map((tournament: any) => {
+      // Map events to their proper games
+      const events = (tournament.events || []).map((event: any) => {
+        const eventGameId = parseInt(event.videogame?.id);
+        const gameName = eventGameId === SF6_ID ? 'Street Fighter 6' : 
+                        eventGameId === TEKKEN8_ID ? 'Tekken 8' : 
+                        event.videogame?.name || 'Unknown';
+        
+        return {
+          id: event.id,
+          name: event.name,
+          game: gameName,
+          gameId: eventGameId,
+          topPlayers: (event.standings?.nodes || []).map((standing: any) => ({
+            placement: standing.placement,
+            name: standing.entrant?.name || 'TBD'
+          }))
+        };
+      });
+
       return {
         id: tournament.id,
         name: tournament.name,
@@ -157,17 +195,7 @@ serve(async (req) => {
         startAt: tournament.startAt,
         endAt: tournament.endAt,
         numAttendees: tournament.numAttendees || 0,
-        events: [{
-          id: `${tournament.id}-main`,
-          name: tournament.name,
-          game: 'Street Fighter 6',
-          gameId: gameIds[0],
-          topPlayers: [
-            { placement: 1, name: 'TBD' },
-            { placement: 2, name: 'TBD' },
-            { placement: 3, name: 'TBD' }
-          ]
-        }]
+        events: events
       };
     });
 
