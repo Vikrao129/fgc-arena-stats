@@ -21,7 +21,50 @@ serve(async (req) => {
 
     const { page = 1, perPage = 20 } = await req.json().catch(() => ({ page: 1, perPage: 20 }));
 
-    const TEKKEN8_GAME_ID = 53945;
+    // First, get the Tekken 8 videogame ID
+    const videogameQuery = `
+      query GetVideogameId($name: String!) {
+        videogames(query: { filter: { name: $name } }) {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+    `;
+
+    console.log('Fetching Tekken 8 videogame ID...');
+    const videogameResponse = await fetch('https://api.start.gg/gql/alpha', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${START_GG_API_TOKEN}`,
+      },
+      body: JSON.stringify({ 
+        query: videogameQuery, 
+        variables: { name: "Tekken 8" } 
+      }),
+    });
+
+    if (!videogameResponse.ok) {
+      throw new Error(`start.gg API error: ${videogameResponse.status} ${videogameResponse.statusText}`);
+    }
+
+    const videogameResult = await videogameResponse.json();
+    console.log('Videogame query result:', JSON.stringify(videogameResult, null, 2));
+
+    if (videogameResult.errors) {
+      console.error('GraphQL errors:', JSON.stringify(videogameResult.errors, null, 2));
+      throw new Error('Failed to get Tekken 8 videogame ID');
+    }
+
+    const tekken8Game = videogameResult.data?.videogames?.nodes?.[0];
+    if (!tekken8Game) {
+      throw new Error('Tekken 8 videogame not found');
+    }
+
+    const TEKKEN8_GAME_ID = parseInt(tekken8Game.id);
+    console.log(`Found Tekken 8 with ID: ${TEKKEN8_GAME_ID}`);
 
     const query = `
       query GetTekken8Tournaments($perPage: Int!, $page: Int!, $gameId: ID!) {
