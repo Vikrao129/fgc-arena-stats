@@ -165,6 +165,8 @@ const GameSection = () => {
                   onClick={() => {
                     if (game.name === "Street Fighter 6") {
                       navigate('/sf6-tournaments');
+                    } else if (game.name === "Tekken 8") {
+                      navigate('/tekken8-tournaments');
                     }
                   }}
                 >

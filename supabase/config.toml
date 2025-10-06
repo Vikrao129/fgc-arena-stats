@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.get-sf6-tournaments]
 verify_jwt = false
+
+[functions.get-tekken8-tournaments]
+verify_jwt = false
