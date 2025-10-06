@@ -25,7 +25,11 @@ const Navigation = () => {
               <Trophy className="h-4 w-4 mr-2" />
               Tournaments
             </Button>
-            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+            <Button 
+              variant="ghost" 
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => navigate('/players')}
+            >
               <Users className="h-4 w-4 mr-2" />
               Players
             </Button>
