@@ -81,7 +81,13 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log('API Response received');
+    console.log('API Response received:', JSON.stringify(data).substring(0, 500));
+
+    // Check if data exists and has the expected structure
+    if (!data || !data.data || !data.data.tournaments || !data.data.tournaments.nodes) {
+      console.error('Invalid API response structure:', data);
+      throw new Error('Invalid response from start.gg API');
+    }
 
     // Process the data to aggregate player statistics
     const playerStats = new Map();
