@@ -17,38 +17,21 @@ serve(async (req) => {
   try {
     console.log('Fetching player stats from start.gg API...');
 
-    // Query to get top players from recent tournaments
+    // Lighter query to stay under start.gg complexity limits
     const playersQuery = `
       query TopPlayers($perPage: Int!, $gameIds: [ID]) {
         tournaments(query: {
           perPage: $perPage
           sortBy: "startAt desc"
-          filter: {
-            past: true
-            videogameIds: $gameIds
-          }
+          filter: { past: true, videogameIds: $gameIds }
         }) {
           nodes {
             events {
-              videogame {
-                id
-                name
-              }
-              standings(query: {perPage: 8, page: 1}) {
+              videogame { id name }
+              standings(query: { perPage: 8, page: 1 }) {
                 nodes {
                   placement
-                  entrant {
-                    name
-                    participants {
-                      gamerTag
-                      prefix
-                      user {
-                        location {
-                          country
-                        }
-                      }
-                    }
-                  }
+                  entrant { name }
                 }
               }
             }
@@ -57,77 +40,89 @@ serve(async (req) => {
       }
     `;
 
-    const variables = {
-      perPage: 20,
-      gameIds: [43868, 49783] // Street Fighter 6 and Tekken 8
+    // Primary variables (kept conservative), with a fallback for complexity errors
+    const primaryVars = { perPage: 12, gameIds: [43868, 49783] }; // SF6 + Tekken 8
+    const fallbackVars = { perPage: 6, gameIds: [43868, 49783] };
+
+    const runQuery = async (variables: any) => {
+      console.log('Querying start.gg API with variables:', JSON.stringify(variables));
+      const response = await fetch('https://api.start.gg/gql/alpha', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${START_GG_API_TOKEN}`,
+        },
+        body: JSON.stringify({ query: playersQuery, variables }),
+      });
+
+      const text = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error('Non-JSON response from start.gg:', text.slice(0, 500));
+        throw new Error(`Invalid JSON from start.gg (status ${response.status})`);
+      }
+
+      console.log('API Response received:', JSON.stringify(data).substring(0, 500));
+      return { ok: response.ok, data };
     };
 
-    console.log('Querying start.gg API with variables:', JSON.stringify(variables));
-
-    const response = await fetch('https://api.start.gg/gql/alpha', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${START_GG_API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        query: playersQuery,
-        variables,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
+    // Try primary, then fallback on complexity error
+    let { ok, data } = await runQuery(primaryVars);
+    if (!ok || data?.errors) {
+      const msg = data?.errors?.[0]?.message || `HTTP ${ok}`;
+      console.warn('Primary query failed, attempting fallback. Reason:', msg);
+      const res2 = await runQuery(fallbackVars);
+      ok = res2.ok;
+      data = res2.data;
     }
 
-    const data = await response.json();
-    console.log('API Response received:', JSON.stringify(data).substring(0, 500));
-
-    // Check if data exists and has the expected structure
+    // Validate structure after attempts
     if (!data || !data.data || !data.data.tournaments || !data.data.tournaments.nodes) {
       console.error('Invalid API response structure:', data);
-      throw new Error('Invalid response from start.gg API');
+      // Return graceful empty payload instead of 500 to avoid client error toast
+      return new Response(
+        JSON.stringify({ error: 'Invalid response from start.gg API', players: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Process the data to aggregate player statistics
-    const playerStats = new Map();
+    const playerStats = new Map<string, any>();
 
     data.data.tournaments.nodes.forEach((tournament: any) => {
-      tournament.events.forEach((event: any) => {
-        const gameName = event.videogame.name === 'TEKKEN 8' ? 'Tekken 8' : 
-                        event.videogame.name === 'Street Fighter 6' ? 'Street Fighter 6' : 
-                        event.videogame.name;
+      tournament.events?.forEach((event: any) => {
+        const rawName: string = event?.videogame?.name || '';
+        const gameName = rawName === 'TEKKEN 8' ? 'Tekken 8' : rawName;
 
-        event.standings.nodes.forEach((standing: any) => {
-          const entrant = standing.entrant;
-          const participant = entrant.participants?.[0];
-          const playerName = participant?.gamerTag || entrant.name;
-          const prefix = participant?.prefix || '';
-          const displayName = prefix ? `${prefix} | ${playerName}` : playerName;
-          const country = participant?.user?.location?.country || '🌍';
+        event.standings?.nodes?.forEach((standing: any) => {
+          const entrant = standing?.entrant;
+          const displayName: string = entrant?.name || 'Unknown';
+          const playerKey = displayName;
 
-          if (!playerStats.has(playerName)) {
-            playerStats.set(playerName, {
-              id: playerName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+          if (!playerStats.has(playerKey)) {
+            playerStats.set(playerKey, {
+              id: displayName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
               name: displayName,
-              country: country,
-              games: new Set([gameName]),
+              country: '🌍', // Country omitted to reduce query complexity
+              games: new Set<string>([gameName]),
               tournaments: 0,
               wins: 0,
-              placements: [],
-              achievements: new Set()
+              placements: [] as number[],
+              achievements: new Set<string>(),
             });
           }
 
-          const stats = playerStats.get(playerName);
+          const stats = playerStats.get(playerKey);
           stats.games.add(gameName);
           stats.tournaments++;
-          stats.placements.push(standing.placement);
+          stats.placements.push(standing?.placement);
 
-          if (standing.placement === 1) {
+          if (standing?.placement === 1) {
             stats.wins++;
             stats.achievements.add(`${gameName} Champion`);
-          } else if (standing.placement <= 3) {
+          } else if (standing?.placement <= 3) {
             stats.achievements.add(`${gameName} Top 3`);
           }
         });
@@ -136,19 +131,18 @@ serve(async (req) => {
 
     // Convert to array and calculate win rates
     const players = Array.from(playerStats.values())
-      .map(player => ({
+      .map((player) => ({
         id: player.id,
         name: player.name,
         country: player.country,
         games: Array.from(player.games),
         tournaments: player.tournaments,
         wins: player.wins,
-        winRate: ((player.wins / player.tournaments) * 100).toFixed(1),
+        winRate: player.tournaments > 0 ? ((player.wins / player.tournaments) * 100).toFixed(1) : '0.0',
         totalEarnings: player.wins * 10000 + player.tournaments * 2000, // Estimated
-        achievements: Array.from(player.achievements).slice(0, 3)
+        achievements: Array.from(player.achievements).slice(0, 3),
       }))
       .sort((a, b) => {
-        // Sort by wins first, then by win rate
         if (b.wins !== a.wins) return b.wins - a.wins;
         return parseFloat(b.winRate) - parseFloat(a.winRate);
       })
@@ -158,18 +152,12 @@ serve(async (req) => {
     return new Response(JSON.stringify(players), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
   } catch (error: any) {
     console.error('Error in get-player-stats function:', error);
+    // Graceful empty payload with message
     return new Response(
-      JSON.stringify({ 
-        error: error.message,
-        players: [] // Return empty array as fallback
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: error?.message || 'Unknown error', players: [] }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
