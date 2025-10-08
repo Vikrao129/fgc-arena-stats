@@ -17,100 +17,139 @@ serve(async (req) => {
   try {
     console.log('Fetching player stats from start.gg API...');
 
-    // Simple fallback data for now since the API structure is complex
-    const fallbackPlayers = [
-      {
-        id: "daigo",
-        name: "Daigo Umehara",
-        country: "🇯🇵",
-        games: ["Street Fighter 6"],
-        tournaments: 12,
-        wins: 8,
-        winRate: "66.7",
-        totalEarnings: 125000,
-        achievements: ["EVO Champion", "Capcom Cup Winner", "CPT Champion"]
-      },
-      {
-        id: "jdcr", 
-        name: "JDCR",
-        country: "🇰🇷",
-        games: ["Tekken 8"],
-        tournaments: 15,
-        wins: 11,
-        winRate: "73.3",
-        totalEarnings: 98500,
-        achievements: ["TWT Champion", "EVO Champion", "King of Iron Fist"]
-      },
-      {
-        id: "punk",
-        name: "Punk",
-        country: "🇺🇸", 
-        games: ["Street Fighter 6"],
-        tournaments: 18,
-        wins: 7,
-        winRate: "38.9",
-        totalEarnings: 89200,
-        achievements: ["Red Bull Kumite", "CPT Premier", "Final Round"]
-      },
-      {
-        id: "knee",
-        name: "Knee",
-        country: "🇰🇷",
-        games: ["Tekken 8"],
-        tournaments: 14,
-        wins: 9,
-        winRate: "64.3", 
-        totalEarnings: 76800,
-        achievements: ["TWT Finals", "Combo Breaker", "CEO Champion"]
-      },
-      {
-        id: "menard",
-        name: "MenaRD",
-        country: "🇩🇴",
-        games: ["Street Fighter 6"],
-        tournaments: 16,
-        wins: 6,
-        winRate: "37.5",
-        totalEarnings: 67500,
-        achievements: ["Capcom Cup", "EVO Top 8", "CPT Premier"]
-      },
-      {
-        id: "arslan",
-        name: "Arslan Ash",
-        country: "🇵🇰",
-        games: ["Tekken 8"],
-        tournaments: 10,
-        wins: 7,
-        winRate: "70.0",
-        totalEarnings: 85000,
-        achievements: ["EVO Champion", "TWT Finals", "Combo Breaker"]
-      },
-      {
-        id: "justin",
-        name: "Justin Wong",
-        country: "🇺🇸",
-        games: ["Street Fighter 6"],
-        tournaments: 20,
-        wins: 5,
-        winRate: "25.0",
-        totalEarnings: 45000,
-        achievements: ["CEO Top 8", "Final Round", "WNF Champion"]
-      },
-      {
-        id: "chanel",
-        name: "Chanel",
-        country: "🇺🇸",
-        games: ["Street Fighter 6"],
-        tournaments: 13,
-        wins: 4,
-        winRate: "30.8",
-        totalEarnings: 38500,
-        achievements: ["Red Bull Kumite", "CPT Premier", "CEO Top 8"]
+    // Query to get top players from recent tournaments
+    const playersQuery = `
+      query TopPlayers($perPage: Int!, $gameIds: [ID]) {
+        tournaments(query: {
+          perPage: $perPage
+          sortBy: "startAt desc"
+          filter: {
+            past: true
+            videogameIds: $gameIds
+          }
+        }) {
+          nodes {
+            events {
+              videogame {
+                id
+                name
+              }
+              standings(query: {perPage: 8, page: 1}) {
+                nodes {
+                  placement
+                  entrant {
+                    name
+                    participants {
+                      gamerTag
+                      prefix
+                      user {
+                        location {
+                          country
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
-    ];
+    `;
 
-    console.log('Returning fallback player data');
-    return new Response(JSON.stringify(fallbackPlayers), {
+    const variables = {
+      perPage: 20,
+      gameIds: [43868, 49783] // Street Fighter 6 and Tekken 8
+    };
+
+    console.log('Querying start.gg API with variables:', JSON.stringify(variables));
+
+    const response = await fetch('https://api.start.gg/gql/alpha', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${START_GG_API_TOKEN}`,
+      },
+      body: JSON.stringify({
+        query: playersQuery,
+        variables,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('API Response received');
+
+    // Process the data to aggregate player statistics
+    const playerStats = new Map();
+
+    data.data.tournaments.nodes.forEach((tournament: any) => {
+      tournament.events.forEach((event: any) => {
+        const gameName = event.videogame.name === 'TEKKEN 8' ? 'Tekken 8' : 
+                        event.videogame.name === 'Street Fighter 6' ? 'Street Fighter 6' : 
+                        event.videogame.name;
+
+        event.standings.nodes.forEach((standing: any) => {
+          const entrant = standing.entrant;
+          const participant = entrant.participants?.[0];
+          const playerName = participant?.gamerTag || entrant.name;
+          const prefix = participant?.prefix || '';
+          const displayName = prefix ? `${prefix} | ${playerName}` : playerName;
+          const country = participant?.user?.location?.country || '🌍';
+
+          if (!playerStats.has(playerName)) {
+            playerStats.set(playerName, {
+              id: playerName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+              name: displayName,
+              country: country,
+              games: new Set([gameName]),
+              tournaments: 0,
+              wins: 0,
+              placements: [],
+              achievements: new Set()
+            });
+          }
+
+          const stats = playerStats.get(playerName);
+          stats.games.add(gameName);
+          stats.tournaments++;
+          stats.placements.push(standing.placement);
+
+          if (standing.placement === 1) {
+            stats.wins++;
+            stats.achievements.add(`${gameName} Champion`);
+          } else if (standing.placement <= 3) {
+            stats.achievements.add(`${gameName} Top 3`);
+          }
+        });
+      });
+    });
+
+    // Convert to array and calculate win rates
+    const players = Array.from(playerStats.values())
+      .map(player => ({
+        id: player.id,
+        name: player.name,
+        country: player.country,
+        games: Array.from(player.games),
+        tournaments: player.tournaments,
+        wins: player.wins,
+        winRate: ((player.wins / player.tournaments) * 100).toFixed(1),
+        totalEarnings: player.wins * 10000 + player.tournaments * 2000, // Estimated
+        achievements: Array.from(player.achievements).slice(0, 3)
+      }))
+      .sort((a, b) => {
+        // Sort by wins first, then by win rate
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        return parseFloat(b.winRate) - parseFloat(a.winRate);
+      })
+      .slice(0, 20); // Top 20 players
+
+    console.log(`Returning ${players.length} players`);
+    return new Response(JSON.stringify(players), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
