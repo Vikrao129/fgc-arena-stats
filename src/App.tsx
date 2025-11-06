@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import SF6Tournaments from "./pages/SF6Tournaments";
 import Tekken8Tournaments from "./pages/Tekken8Tournaments";
 import Players from "./pages/Players";
+import Games from "./pages/Games";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/games" element={<Games />} />
           <Route path="/sf6-tournaments" element={<SF6Tournaments />} />
           <Route path="/tekken8-tournaments" element={<Tekken8Tournaments />} />
           <Route path="/players" element={<Players />} />

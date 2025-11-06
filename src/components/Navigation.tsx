@@ -33,7 +33,11 @@ const Navigation = () => {
               <Users className="h-4 w-4 mr-2" />
               Players
             </Button>
-            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+            <Button 
+              variant="ghost" 
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => navigate('/games')}
+            >
               <Gamepad2 className="h-4 w-4 mr-2" />
               Games
             </Button>
