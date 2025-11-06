@@ -19,6 +19,12 @@ const Games = () => {
       description: "Browse upcoming and past Tekken 8 tournaments",
       route: "/tekken8-tournaments",
       image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop"
+    },
+    {
+      title: "2XKO",
+      description: "Browse upcoming and past 2XKO tournaments",
+      route: "/2xko-tournaments",
+      image: "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800&auto=format&fit=crop"
     }
   ];
 
